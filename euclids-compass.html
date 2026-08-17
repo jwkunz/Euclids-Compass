@@ -188,12 +188,20 @@
   .btn.wide{ flex:1; text-align:center; }
 
   .layer-row{
-    display:flex; align-items:center; gap:6px;
-    padding:6px 6px; border-radius:5px; margin-bottom:4px;
+    display:flex; align-items:center; gap:4px;
+    padding:6px 5px; border-radius:5px; margin-bottom:4px;
     border:1px solid transparent; cursor:pointer;
   }
   .layer-row.active{ border-color:var(--brass); background:rgba(176,141,79,0.12); }
   .layer-row.flash{ background:rgba(176,141,79,0.5); transition:background .55s ease; }
+
+  .clear-locked-row{
+    display:flex; align-items:center; gap:7px; margin-top:8px;
+    font-size:11px; color:var(--panel-text-dim); cursor:pointer; user-select:none;
+  }
+  .clear-locked-row input[type=checkbox]{
+    width:14px; height:14px; accent-color:var(--wax-bright); cursor:pointer;
+  }
   .layer-row input[type=text]{
     flex:1; background:transparent; border:none; color:var(--panel-text);
     font-size:12.5px; font-family:'Inter',sans-serif; min-width:0;
@@ -204,14 +212,15 @@
     flex:none; cursor:pointer; padding:0;
   }
   .eye{
-    width:20px; height:20px; flex:none; cursor:pointer; background:none; border:none;
+    width:18px; height:18px; flex:none; cursor:pointer; background:none; border:none;
     color:var(--panel-text-dim); display:flex; align-items:center; justify-content:center;
   }
   .eye.hidden{ color:rgba(233,220,192,0.25); }
-  .eye svg{ width:16px; height:16px; }
+  .eye.locked{ color:var(--wax-bright); }
+  .eye svg{ width:15px; height:15px; }
   select.dash-select{
     background:rgba(0,0,0,0.25); color:var(--panel-text); border:1px solid var(--walnut-seam);
-    font-size:11px; border-radius:3px; padding:2px 4px; flex:none;
+    font-size:10.5px; border-radius:3px; padding:2px 3px; flex:none; max-width:64px;
   }
   .layer-del{
     background:none; border:none; color:var(--panel-text-dim); cursor:pointer; flex:none;
@@ -404,6 +413,10 @@
         <button class="btn wide" id="exportBtn">Export PNG</button>
         <button class="btn wide danger" id="clearBtn">Clear all</button>
       </div>
+      <label class="clear-locked-row">
+        <input type="checkbox" id="clearLockedChk">
+        <span>Also clear locked layers</span>
+      </label>
     </div>
 
     <div class="panel help">
@@ -433,7 +446,9 @@ const ICONS = {
   transport: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="1.8" fill="currentColor" stroke="none"/><circle cx="19" cy="19" r="1.8" fill="currentColor" stroke="none"/><path d="M5 19h14"/><path d="M12 19V5"/><path d="M9 8l3-3 3 3"/></svg>`,
   check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.5"/></svg>`,
   eyeOpen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>`,
-  eyeShut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a15.6 15.6 0 0 1-3.4 4.3M6.6 6.6C4 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.9-.8"/><path d="M9.5 9.8a3 3 0 0 0 4.2 4.2"/></svg>`
+  eyeShut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a15.6 15.6 0 0 1-3.4 4.3M6.6 6.6C4 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.9-.8"/><path d="M9.5 9.8a3 3 0 0 0 4.2 4.2"/></svg>`,
+  lockClosed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`,
+  lockOpen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V7a4 4 0 0 1 7.5-1.9"/></svg>`
 };
 
 const TOOLS = [
@@ -452,7 +467,7 @@ const uid = p => p + (nextId++);
 const PALETTE = ['#2b2016', '#8c2f21', '#3a5c46', '#3d4f7a', '#7a5230', '#6b3f6b'];
 let paletteIdx = 1;
 
-const layers = [{ id:'layer-1', name:'Construction', color:'#2b2016', dash:'solid', visible:true }];
+const layers = [{ id:'layer-1', name:'Construction', color:'#2b2016', dash:'dashed', visible:true, locked:false }];
 const points = [];   // {id,x,y,layerId}
 const lines  = [];   // {id,p1,p2,layerId}  segment between two point ids
 const arcs   = [];   // {id,cx,cy,r,startAngle,endAngle,full,anticlockwise,layerId}
@@ -522,6 +537,7 @@ function angleAt(v,p1,p2){
   return Math.acos(cos)*180/Math.PI;
 }
 const getPoint = id => points.find(p => p.id === id);
+const isLockedLayer = layerId => { const l=layers.find(x=>x.id===layerId); return !!(l && l.locked); };
 const TWO_PI = Math.PI*2;
 const norm = a => ((a % TWO_PI) + TWO_PI) % TWO_PI;
 
@@ -923,11 +939,14 @@ canvas.addEventListener('pointerdown', (evt)=>{
   const world = mouseWorld(evt);
   lastMouseWorld = world;
   const hit = tool==='select' ? pointHitTest(world, evt.pointerType==='touch'?18:12) : null;
+  const hitPoint = hit ? getPoint(hit.id) : null;
+  const hitLocked = hitPoint ? isLockedLayer(hitPoint.layerId) : false;
   singleGesture = {
     pointerId: evt.pointerId,
     startScreen: {x:evt.clientX, y:evt.clientY},
     moved:false,
-    onPoint: hit ? getPoint(hit.id) : null
+    onPoint: (hitPoint && !hitLocked) ? hitPoint : null,
+    lockedAttempt: hitLocked
   };
   hoverSnap = (tool==='select' && !pendingExtend) ? null : findSnap(world);
   render();
@@ -996,8 +1015,10 @@ canvas.addEventListener('pointerup', (evt)=>{
 
   if (singleGesture && singleGesture.pointerId===evt.pointerId){
     const wasMoved = singleGesture.moved;
+    const lockedAttempt = singleGesture.lockedAttempt;
     if (dragPoint){ dragPoint=null; singleGesture=null; renderAll(); return; }
     if (!wasMoved) handleClick(mouseWorld(evt));
+    else if (lockedAttempt) flashLockedNotice();
     singleGesture=null;
     if (tool!=='select') hoverSnap=null;
     render();
@@ -1144,8 +1165,17 @@ function flashLayerRow(layerId){
   setTimeout(()=>row.classList.remove('flash'), 550);
 }
 
+function selectedObjectLayerId(){
+  if (!selection) return null;
+  if (selection.type==='point'){ const p=getPoint(selection.id); return p?p.layerId:null; }
+  if (selection.type==='line'){ const l=lines.find(x=>x.id===selection.id); return l?l.layerId:null; }
+  if (selection.type==='arc'){ const a=arcs.find(x=>x.id===selection.id); return a?a.layerId:null; }
+  return null;
+}
+
 function reassignSelectionLayer(layerId){
   if (!selection) return;
+  if (isLockedLayer(selectedObjectLayerId())){ flashLockedNotice(); return; }
   if (selection.type==='point'){
     const p=getPoint(selection.id); if (p) p.layerId=layerId;
   } else if (selection.type==='line'){
@@ -1157,6 +1187,7 @@ function reassignSelectionLayer(layerId){
 
 function deleteSelection(){
   if (!selection) return;
+  if (isLockedLayer(selectedObjectLayerId())){ flashLockedNotice(); return; }
   pushHistory();
   if (selection.type==='point'){
     const id=selection.id;
@@ -1225,6 +1256,17 @@ function smallToggle(label, value, current, onSet){
 }
 
 /* ============================== STATUS / READOUT ============================== */
+let lockNoticeTimer = null;
+function flashLockedNotice(){
+  const instr = document.getElementById('instruction');
+  const mobileInstr = document.getElementById('mobileInstruction');
+  const msg = '🔒 That layer is locked — unlock it to edit or delete its contents.';
+  instr.textContent = msg;
+  if (mobileInstr) mobileInstr.textContent = msg;
+  clearTimeout(lockNoticeTimer);
+  lockNoticeTimer = setTimeout(updateStatus, 1800);
+}
+
 function updateStatus(){
   const instr = document.getElementById('instruction');
   const modeBadge = document.getElementById('modeBadge');
@@ -1301,6 +1343,13 @@ function renderLayerPanel(){
     eye.addEventListener('click', (e)=>{ e.stopPropagation(); layer.visible=!layer.visible; renderAll(); });
     row.appendChild(eye);
 
+    const lock=document.createElement('button');
+    lock.className='eye'+(layer.locked?' locked':'');
+    lock.innerHTML = layer.locked?ICONS.lockClosed:ICONS.lockOpen;
+    lock.title = layer.locked ? 'Unlock layer' : 'Lock layer (protects its items from editing or clearing)';
+    lock.addEventListener('click', (e)=>{ e.stopPropagation(); layer.locked=!layer.locked; renderAll(); });
+    row.appendChild(lock);
+
     const swatch=document.createElement('input');
     swatch.type='color'; swatch.className='swatch'; swatch.value=layer.color;
     swatch.addEventListener('input', ()=>{ layer.color=swatch.value; render(); });
@@ -1313,8 +1362,10 @@ function renderLayerPanel(){
 
     const dash=document.createElement('select');
     dash.className='dash-select';
+    dash.title='Line style';
+    const DASH_LABELS = {solid:'Solid', dashed:'Dashed', dotted:'Dotted'};
     ['solid','dashed','dotted'].forEach(opt=>{
-      const o=document.createElement('option'); o.value=opt; o.textContent=opt[0].toUpperCase();
+      const o=document.createElement('option'); o.value=opt; o.textContent=DASH_LABELS[opt];
       if (layer.dash===opt) o.selected=true;
       dash.appendChild(o);
     });
@@ -1322,10 +1373,11 @@ function renderLayerPanel(){
     row.appendChild(dash);
 
     const del=document.createElement('button');
-    del.className='layer-del'; del.textContent='✕'; del.title='Delete layer';
+    del.className='layer-del'; del.textContent='✕'; del.title = layer.locked ? 'Unlock this layer to delete it' : 'Delete layer';
+    if (layer.locked){ del.style.opacity=0.35; del.style.cursor='not-allowed'; }
     del.addEventListener('click', (e)=>{
       e.stopPropagation();
-      if (layers.length===1) return;
+      if (layer.locked || layers.length===1) return;
       pushHistory();
       const idx=layers.findIndex(l=>l.id===layer.id);
       layers.splice(idx,1);
@@ -1346,9 +1398,11 @@ function renderLayerPanel(){
         renderProps();
         render();
         flashLayerRow(layer.id);
-      } else {
+      } else if (!layer.locked){
         activeLayerId=layer.id;
         renderLayerPanel();
+      } else {
+        flashLayerRow(layer.id);
       }
     });
     list.appendChild(row);
@@ -1358,7 +1412,7 @@ function renderLayerPanel(){
 document.getElementById('addLayerBtn').addEventListener('click', ()=>{
   pushHistory();
   const color = PALETTE[paletteIdx % PALETTE.length]; paletteIdx++;
-  const layer = { id:uid('layer'), name:'Layer '+layers.length, color, dash:'solid', visible:true };
+  const layer = { id:uid('layer'), name:'Layer '+layers.length, color, dash:'solid', visible:true, locked:false };
   layers.push(layer);
   activeLayerId=layer.id;
   renderLayerPanel();
@@ -1390,8 +1444,15 @@ function renderProps(){
       ${a.full?'':`<div class="props-line"><span>sweep</span> ${(Math.abs(a.endAngle-a.startAngle)*180/Math.PI).toFixed(1)}°</div>`}
       <div class="props-line"><span>layer</span> ${layerNameOf(a.layerId)}</div>`;
   }
-  body.innerHTML += `<div class="props-empty" style="margin-top:8px;">Click a layer above to move this here.</div>`;
-  document.getElementById('extendSelBtn').style.display = (selection.type==='line') ? 'inline-block' : 'none';
+  const locked = isLockedLayer(selectedObjectLayerId());
+  body.innerHTML += locked
+    ? `<div class="props-empty" style="margin-top:8px; color:var(--wax-bright);">🔒 This layer is locked — unlock it to edit or delete.</div>`
+    : `<div class="props-empty" style="margin-top:8px;">Click a layer above to move this here.</div>`;
+  document.getElementById('extendSelBtn').style.display = (selection.type==='line' && !locked) ? 'inline-block' : 'none';
+  const delBtn = document.getElementById('deleteSelBtn');
+  delBtn.disabled = locked;
+  delBtn.style.opacity = locked ? 0.4 : 1;
+  delBtn.style.cursor = locked ? 'not-allowed' : 'pointer';
 }
 function layerNameOf(id){
   const l=layers.find(x=>x.id===id);
@@ -1404,6 +1465,8 @@ document.getElementById('deleteSelBtn').addEventListener('click', deleteSelectio
 let pendingExtend = null; // {lineId}
 document.getElementById('extendSelBtn').addEventListener('click', ()=>{
   if (!selection || selection.type!=='line') return;
+  const l = lines.find(x=>x.id===selection.id);
+  if (l && isLockedLayer(l.layerId)){ flashLockedNotice(); return; }
   pendingExtend = { lineId: selection.id };
   updateStatus();
   render();
@@ -1412,6 +1475,7 @@ document.getElementById('extendSelBtn').addEventListener('click', ()=>{
 function applyExtend(lineId, targetPoint){
   const l = lines.find(x=>x.id===lineId);
   if (!l) return;
+  if (isLockedLayer(l.layerId)){ flashLockedNotice(); return; }
   const p1=getPoint(l.p1), p2=getPoint(l.p2);
   const dirx=p2.x-p1.x, diry=p2.y-p1.y;
   const len2 = dirx*dirx+diry*diry;
@@ -1491,10 +1555,32 @@ function hideCheckBanner(){
 document.getElementById('undoBtn').addEventListener('click', undo);
 document.getElementById('redoBtn').addEventListener('click', redo);
 document.getElementById('clearBtn').addEventListener('click', ()=>{
-  if (!confirm('Clear the whole canvas? This cannot be undone once you close the app.')) return;
+  const includeLocked = document.getElementById('clearLockedChk').checked;
+  const hasLocked = layers.some(l=>l.locked);
+  const msg = (includeLocked || !hasLocked)
+    ? 'Clear the whole canvas? This cannot be undone once you close the app.'
+    : 'Clear all unlocked layers? Locked layers will be kept. This cannot be undone once you close the app.';
+  if (!confirm(msg)) return;
   pushHistory();
-  points.length=0; lines.length=0; arcs.length=0;
-  selection=null; pending=null; savedRadius=null;
+
+  if (includeLocked){
+    points.length=0; lines.length=0; arcs.length=0;
+  } else {
+    const lockedIds = new Set(layers.filter(l=>l.locked).map(l=>l.id));
+    // keep any line/arc on a locked layer, and any point still needed by a kept line
+    const keptLines = lines.filter(l=>lockedIds.has(l.layerId));
+    const neededPointIds = new Set();
+    keptLines.forEach(l=>{ neededPointIds.add(l.p1); neededPointIds.add(l.p2); });
+
+    for (let i=points.length-1;i>=0;i--){
+      const p=points[i];
+      if (!lockedIds.has(p.layerId) && !neededPointIds.has(p.id)) points.splice(i,1);
+    }
+    for (let i=lines.length-1;i>=0;i--) if (!lockedIds.has(lines[i].layerId)) lines.splice(i,1);
+    for (let i=arcs.length-1;i>=0;i--) if (!lockedIds.has(arcs[i].layerId)) arcs.splice(i,1);
+  }
+
+  selection=null; pending=null; pendingExtend=null; checkPending=null; hideCheckBanner(); savedRadius=null;
   renderAll();
 });
 document.getElementById('exportBtn').addEventListener('click', ()=>{
@@ -1522,4 +1608,3 @@ renderAll();
 </script>
 </body>
 </html>
-
