@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="application-name" content="Euclid's Compass">
+<meta name="application-version" content="1.0.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Euclid's Compass</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -70,6 +72,17 @@
     color:var(--panel-text);
   }
   header h1 .glyph{ color:var(--brass-bright); font-style:italic; font-weight:500; }
+  .version-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.02em;
+    color:var(--panel-text-dim); background:rgba(0,0,0,0.22);
+    border:1px solid var(--walnut-seam); border-radius:10px; padding:2px 7px;
+    vertical-align:middle;
+  }
+  .help-modal-header h2 .version-badge{ font-size:9.5px; margin-left:2px; }
+  .help-legal .version-badge{
+    font-family:'IBM Plex Mono',monospace; font-size:10px; background:none;
+    border:none; padding:0; color:inherit; font-weight:600;
+  }
   header .subtitle{
     font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
     color:var(--panel-text-dim); font-family:'IBM Plex Mono',monospace;
@@ -249,6 +262,66 @@
   /* ---------- mobile menu controls (hidden on desktop) ---------- */
   .menu-btn, .sidebar-close, .backdrop{ display:none; }
 
+  /* ---------- help button & modal (always available) ---------- */
+  .help-btn{
+    width:32px; height:32px; border-radius:50%; flex:none;
+    background:rgba(255,255,255,0.06); border:1px solid var(--brass);
+    color:var(--brass-bright); font-family:'Fraunces',serif; font-size:15px; font-weight:600;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    touch-action:manipulation;
+  }
+  .help-btn:hover{ background:rgba(176,141,79,0.18); }
+
+  .help-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,0.6);
+    z-index:40; display:none;
+  }
+  .help-backdrop.open{ display:block; }
+
+  .help-modal{
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:min(640px, 92vw); max-height:84vh;
+    background:var(--walnut); border:1px solid var(--brass); border-radius:8px;
+    box-shadow:0 24px 60px rgba(0,0,0,0.6);
+    z-index:41; display:none; flex-direction:column; overflow:hidden;
+  }
+  .help-modal.open{ display:flex; }
+  .help-modal-header{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 18px; border-bottom:1px solid var(--walnut-seam); flex:none;
+  }
+  .help-modal-header h2{ font-size:15px; color:var(--panel-text); font-weight:600; }
+  .help-close{
+    width:28px; height:28px; border-radius:6px; flex:none;
+    background:rgba(255,255,255,0.06); border:1px solid var(--walnut-seam);
+    color:var(--panel-text); cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .help-close svg{ width:15px; height:15px; }
+
+  .help-modal-body{
+    overflow-y:auto; padding:20px 24px 26px;
+    background:
+      radial-gradient(ellipse at 30% 8%, rgba(255,255,255,0.14), transparent 55%),
+      linear-gradient(160deg, #f2e6c4 0%, #e6d6ab 55%, #d9c48f 100%);
+    color:var(--ink); font-family:'Inter',sans-serif; font-size:13px; line-height:1.65;
+  }
+  .help-modal-body h3{
+    font-family:'Fraunces',serif; font-size:15.5px; font-weight:600;
+    margin:20px 0 8px; color:var(--ink);
+  }
+  .help-modal-body h3:first-child{ margin-top:0; }
+  .help-modal-body p{ margin:0 0 10px; }
+  .help-modal-body ul, .help-modal-body ol{ margin:0 0 10px 20px; padding:0; }
+  .help-modal-body li{ margin-bottom:5px; }
+  .help-modal-body a{ color:#6b3620; font-weight:600; }
+  .help-modal-body hr{ border:none; border-top:1px solid rgba(43,32,22,0.2); margin:18px 0 10px; }
+  .help-legal{ font-size:11px; color:#6b5c42; margin:0; }
+
+  @media (max-width: 480px){
+    .help-modal{ width:94vw; max-height:88vh; }
+    .help-modal-body{ padding:16px 16px 22px; font-size:12.5px; }
+  }
+
   /* ---------- responsive layout ---------- */
   @media (max-width: 860px){
     .app{
@@ -348,13 +421,14 @@
 
 <div class="app">
   <header>
-    <h1><span class="glyph">Euclid's</span> Compass</h1>
+    <h1><span class="glyph">Euclid's</span> Compass <span class="version-badge" data-version-slot>v0.0.0</span></h1>
     <div class="subtitle">straightedge &amp; compass, on vellum</div>
     <div class="spacer"></div>
     <div class="readout" id="readout">
       <div><span>tool</span> select</div>
       <div><span>compass</span> collapsing</div>
     </div>
+    <button class="help-btn" id="helpBtn" title="Help &amp; about">?</button>
     <button class="menu-btn" id="menuBtn" title="Layers &amp; settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
@@ -433,9 +507,91 @@
   </aside>
 </div>
 
+<div class="help-backdrop" id="helpBackdrop"></div>
+<div class="help-modal" id="helpModal">
+  <div class="help-modal-header">
+    <h2>Euclid's Compass <span class="version-badge" data-version-slot>v0.0.0</span> — Help &amp; About</h2>
+    <button class="help-close" id="helpClose" title="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
+    </button>
+  </div>
+  <div class="help-modal-body">
+
+    <h3>What this is</h3>
+    <p>A single-file straightedge-and-compass construction tool — the same constructions Euclid
+    works through in the <em>Elements</em> — with layers, an equivalence checker, and touch support.
+    Everything runs locally in the browser; nothing you draw leaves this page.</p>
+
+    <h3>Tools</h3>
+    <ul>
+      <li><b>Select</b> — click a point, line, or circle/arc to select it. Drag a point to move it.
+        Delete/Backspace removes it. Click a layer in the panel to move the selection there.</li>
+      <li><b>Point</b> — click to place a point; snaps to existing points and computed intersections.</li>
+      <li><b>Line</b> — click two points to draw a straight segment — the straightedge.</li>
+      <li><b>Compass</b> — click a centre, then a radius point, to draw a circle. Toggle
+        <b>Arc</b> to swing only part of the circle. Toggle <b>Collapsing</b> / <b>Rigid</b> to
+        control whether the compass keeps its span after being lifted.</li>
+      <li><b>Transport</b> — click two points to capture a length, click a centre, click a
+        direction — a point is placed exactly that distance away.</li>
+      <li><b>Check</b> — click two lines, two circles/arcs, or two angles to test them for
+        equality, with the difference shown.</li>
+    </ul>
+    <p>A selected line can be <b>extended or trimmed</b> to a new point, like sliding a straightedge
+    further along its own direction. Layers can be locked to protect their contents from editing,
+    deletion, or "Clear all."</p>
+
+    <h3>Euclid's tools, and how this app maps to them</h3>
+    <p>Euclid's <em>Elements</em> opens with three postulates describing exactly two instruments: an
+    unmarked <b>straightedge</b>, used only to draw a line between two points or extend one, and a
+    <b>compass</b>, used to draw a circle with a given centre and radius.</p>
+    <p>Ancient tradition holds Euclid's compass was a <b>collapsing compass</b> — it lost its span
+    the moment it left the page. You couldn't just pick it up and carry a radius somewhere else; that
+    had to be <em>proven</em> possible, and that proof is Book I, Proposition 2. This app models both
+    traditions: <b>Collapsing</b> mode requires re-measuring every radius from scratch, while
+    <b>Rigid</b> mode holds its span like a modern drafting compass. The <b>Transport</b> tool
+    directly implements the method of Proposition I.2 — reproducing a captured length exactly at a
+    new location, in either compass mode. The <b>Check</b> tool mirrors the <em>Elements</em>'
+    Common Notions about equal magnitudes, letting you confirm a construction's claims of equality
+    instead of eyeballing them.</p>
+
+    <h3>Using this app with the text</h3>
+    <ol>
+      <li>Read a proposition's construction — Euclid gives it as a sequence of instructions
+        ("let the line AB be drawn," "with centre A and distance AB describe the circle BCD," ...).</li>
+      <li>Reproduce each step with the matching tool: <b>Point</b> for given points, <b>Line</b> for
+        straightedge steps, <b>Compass</b> for "describe a circle," <b>Transport</b> for steps that
+        copy a length.</li>
+      <li>Use <b>Check</b> once you're done to confirm the proposition's equality claims.</li>
+      <li>Use <b>Layers</b> to separate the problem's given elements from the construction lines you
+        add to solve it.</li>
+    </ol>
+    <p>A good starting point is Book I, Proposition 1 — an equilateral triangle built from two
+    circles and a line — using only the Point, Compass, and Line tools in sequence.</p>
+
+    <h3>The text, online</h3>
+    <p>This app doesn't include Euclid's text itself. For the full <em>Elements</em> (all 13 books)
+    with the original diagrams, see
+    <a href="https://www.euclids-elements.org/elements/" target="_blank" rel="noopener">David E. Joyce's edition of Euclid's Elements</a>
+    (Clark University) — free online, with its own
+    <a href="https://www.euclids-elements.org/geomlib/compass/" target="_blank" rel="noopener">compass geometry tutorial</a>
+    that pairs well with this app.</p>
+
+    <hr>
+    <p class="help-legal">Euclid's Compass <span data-version-slot>v0.0.0</span> · Copyright © 2026 Numerius Engineering LLC. Released under the MIT License —
+    free to use, modify, and redistribute, including commercially, provided the copyright notice is kept.</p>
+  </div>
+</div>
+
 <script>
 (function(){
 "use strict";
+
+/* ============================== VERSION ==============================
+   Single source of truth for the app version. Every on-page display of
+   the version (header badge, help modal title, help modal footer, and
+   the <meta name="application-version"> tag) is driven from this one
+   constant at init time, so they can never drift out of sync. */
+const APP_VERSION = '1.0.0';
 
 /* ============================== ICONS ============================== */
 const ICONS = {
@@ -1051,7 +1207,7 @@ canvas.addEventListener('wheel', (evt)=>{
 
 window.addEventListener('keydown', (evt)=>{
   if (evt.code==='Space'){ spaceDown=true; canvas.style.cursor='grab'; }
-  if (evt.key==='Escape'){ pending=null; pendingExtend=null; checkPending=null; render(); updateStatus(); }
+  if (evt.key==='Escape'){ pending=null; pendingExtend=null; checkPending=null; closeHelp(); render(); updateStatus(); }
   if ((evt.key==='Delete'||evt.key==='Backspace') && selection){
     if (document.activeElement && document.activeElement.tagName==='INPUT') return;
     deleteSelection();
@@ -1599,7 +1755,22 @@ document.getElementById('menuBtn').addEventListener('click', openSidebar);
 document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
 backdropEl.addEventListener('click', closeSidebar);
 
+/* ============================== HELP MODAL ============================== */
+const helpModalEl = document.getElementById('helpModal');
+const helpBackdropEl = document.getElementById('helpBackdrop');
+function openHelp(){ helpModalEl.classList.add('open'); helpBackdropEl.classList.add('open'); }
+function closeHelp(){ helpModalEl.classList.remove('open'); helpBackdropEl.classList.remove('open'); }
+document.getElementById('helpBtn').addEventListener('click', openHelp);
+document.getElementById('helpClose').addEventListener('click', closeHelp);
+helpBackdropEl.addEventListener('click', closeHelp);
+
 /* ============================== INIT ============================== */
+function syncVersionDisplays(){
+  document.querySelectorAll('[data-version-slot]').forEach(el=>{ el.textContent = 'v'+APP_VERSION; });
+  const metaVer = document.querySelector('meta[name="application-version"]');
+  if (metaVer) metaVer.setAttribute('content', APP_VERSION);
+}
+syncVersionDisplays();
 buildToolbar();
 resizeCanvas();
 renderAll();
