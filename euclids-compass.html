@@ -965,7 +965,7 @@ canvas.addEventListener('pointermove', (evt)=>{
     const dx=evt.clientX-singleGesture.startScreen.x, dy=evt.clientY-singleGesture.startScreen.y;
     if (Math.hypot(dx,dy) > TAP_MOVE_TOL) singleGesture.moved=true;
 
-    if (tool==='select' && singleGesture.onPoint){
+    if (tool==='select' && singleGesture.onPoint && singleGesture.moved){
       if (!dragPoint){ dragPoint=singleGesture.onPoint; pushHistory(); }
       const snap = findSnap(world);
       const loc = (snap && snap.existing && snap.existing.id!==dragPoint.id) ? snap : {x:world.x,y:world.y};
