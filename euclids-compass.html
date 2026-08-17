@@ -314,6 +314,24 @@
   }
 
   .mobile-instruction{ display:none; }
+
+  /* ---------- check-equivalence banner ---------- */
+  .check-banner{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    max-width:calc(100% - 40px);
+    padding:9px 16px; border-radius:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+    background:rgba(36,21,9,0.92); color:var(--panel-text);
+    border:1px solid var(--brass);
+    box-shadow:0 8px 20px rgba(0,0,0,0.4);
+    display:flex; align-items:center; gap:8px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .check-banner.equal{ border-color:#5a7a63; }
+  .check-banner.equal .check-verdict{ color:#8fbf9e; }
+  .check-banner.notequal{ border-color:var(--wax-bright); }
+  .check-banner.notequal .check-verdict{ color:var(--wax-bright); }
+  .check-verdict{ font-weight:600; letter-spacing:.03em; }
 </style>
 </head>
 <body>
@@ -341,6 +359,7 @@
       <canvas id="canvas"></canvas>
     </div>
     <div class="mobile-instruction" id="mobileInstruction">Select a tool to begin.</div>
+    <div class="check-banner" id="checkBanner" style="display:none;"></div>
   </div>
 
   <div class="backdrop" id="backdrop"></div>
@@ -411,6 +430,7 @@ const ICONS = {
   line: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 20L20 4"/><circle cx="4" cy="20" r="2" fill="currentColor" stroke="none"/><circle cx="20" cy="4" r="2" fill="currentColor" stroke="none"/></svg>`,
   compass: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l-6 16M12 4l6 16"/><circle cx="12" cy="4" r="1.8" fill="currentColor" stroke="none"/><circle cx="6" cy="20" r="1.6" fill="currentColor" stroke="none"/><path d="M15 14a5 5 0 0 1-1.6 1.4" stroke-dasharray="1 3"/></svg>`,
   transport: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="1.8" fill="currentColor" stroke="none"/><circle cx="19" cy="19" r="1.8" fill="currentColor" stroke="none"/><path d="M5 19h14"/><path d="M12 19V5"/><path d="M9 8l3-3 3 3"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.5"/></svg>`,
   eyeOpen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>`,
   eyeShut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a15.6 15.6 0 0 1-3.4 4.3M6.6 6.6C4 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.9-.8"/><path d="M9.5 9.8a3 3 0 0 0 4.2 4.2"/></svg>`
 };
@@ -421,6 +441,7 @@ const TOOLS = [
   {id:'line', name:'Line'},
   {id:'compass', name:'Compass'},
   {id:'transport', name:'Transport'},
+  {id:'check', name:'Check'},
 ];
 
 /* ============================== STATE ============================== */
@@ -442,6 +463,10 @@ let compassMode = 'collapsing';// 'collapsing' | 'rigid'
 let savedRadius = null;
 
 let pending = null;   // in-progress multi-click construction
+
+let checkMode = 'lines';    // 'lines' | 'circles' | 'angles'
+let checkPending = null;    // in-progress equivalence check
+let checkResult = null;     // {ok, text} most recent result, shown in a banner
 let hoverSnap = null; // {x,y,existing:pointObj|null}
 let selection = null; // {type,id}
 let dragPoint = null; // point being dragged with select tool
@@ -485,6 +510,16 @@ function redo(){
 
 /* ============================== GEOMETRY ============================== */
 const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+const EPS_LENGTH = 0.75;
+const EPS_ANGLE = 0.75; // degrees
+function angleAt(v,p1,p2){
+  const v1x=p1.x-v.x, v1y=p1.y-v.y, v2x=p2.x-v.x, v2y=p2.y-v.y;
+  const m1=Math.hypot(v1x,v1y), m2=Math.hypot(v2x,v2y);
+  if (m1<1e-9 || m2<1e-9) return 0;
+  let cos=(v1x*v2x+v1y*v2y)/(m1*m2);
+  cos=Math.max(-1,Math.min(1,cos));
+  return Math.acos(cos)*180/Math.PI;
+}
 const getPoint = id => points.find(p => p.id === id);
 const TWO_PI = Math.PI*2;
 const norm = a => ((a % TWO_PI) + TWO_PI) % TWO_PI;
@@ -666,6 +701,7 @@ function render(){
   // pending construction preview
   drawPendingPreview();
   drawExtendPreview();
+  drawCheckHighlights();
 
   // hover snap indicator
   if (hoverSnap && (tool!=='select' || pendingExtend)){
@@ -706,6 +742,41 @@ function drawExtendPreview(){
   ctx.setLineDash([6/view.scale,4/view.scale]);
   ctx.lineWidth=1.6/view.scale;
   ctx.beginPath(); ctx.moveTo(anchor.x,anchor.y); ctx.lineTo(cursor.x,cursor.y); ctx.stroke();
+  ctx.restore();
+}
+
+function drawCheckHighlights(){
+  if (tool!=='check' || !checkPending) return;
+  ctx.save();
+  ctx.strokeStyle='#b08d4f';
+  ctx.lineWidth=4/view.scale;
+  ctx.setLineDash([]);
+
+  if (checkPending.picks){
+    const id = checkPending.picks[0];
+    if (checkMode==='lines'){
+      const l=lines.find(x=>x.id===id);
+      if (l){ const p1=getPoint(l.p1), p2=getPoint(l.p2); ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke(); }
+    } else {
+      const a=arcs.find(x=>x.id===id);
+      if (a){ ctx.beginPath(); drawArcPath(a); ctx.stroke(); }
+    }
+  } else {
+    // angle mode: ring the picked points and draw the rays gathered so far
+    const dot = (id)=>{
+      const p=getPoint(id); if(!p) return;
+      ctx.beginPath(); ctx.arc(p.x,p.y,6/view.scale,0,TWO_PI); ctx.stroke();
+    };
+    const ray = (v,p)=>{
+      const a=getPoint(v), b=getPoint(p); if(!a||!b) return;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    };
+    if (checkPending.v1) dot(checkPending.v1);
+    if (checkPending.a1){ dot(checkPending.a1); ray(checkPending.v1, checkPending.a1); }
+    if (checkPending.b1){ dot(checkPending.b1); ray(checkPending.v1, checkPending.b1); }
+    if (checkPending.v2) dot(checkPending.v2);
+    if (checkPending.a2){ dot(checkPending.a2); ray(checkPending.v2, checkPending.a2); }
+  }
   ctx.restore();
 }
 
@@ -958,7 +1029,7 @@ canvas.addEventListener('wheel', (evt)=>{
 
 window.addEventListener('keydown', (evt)=>{
   if (evt.code==='Space'){ spaceDown=true; canvas.style.cursor='grab'; }
-  if (evt.key==='Escape'){ pending=null; pendingExtend=null; render(); updateStatus(); }
+  if (evt.key==='Escape'){ pending=null; pendingExtend=null; checkPending=null; render(); updateStatus(); }
   if ((evt.key==='Delete'||evt.key==='Backspace') && selection){
     if (document.activeElement && document.activeElement.tagName==='INPUT') return;
     deleteSelection();
@@ -982,6 +1053,11 @@ function handleClick(world){
     const hit = objectHitTest(world, lastPointerType==='touch'?18:12);
     selection = hit;
     renderAll();
+    return;
+  }
+
+  if (tool==='check'){
+    handleCheckClick(world);
     return;
   }
 
@@ -1086,7 +1162,7 @@ function buildToolbar(){
     btn.className='tool-btn'+(tool===t.id?' active':'');
     btn.innerHTML=ICONS[t.id];
     btn.title=t.name;
-    btn.addEventListener('click', ()=>{ tool=t.id; pending=null; pendingExtend=null; selection=null; buildToolbar(); renderAll(); });
+    btn.addEventListener('click', ()=>{ tool=t.id; pending=null; pendingExtend=null; selection=null; checkPending=null; hideCheckBanner(); buildToolbar(); renderAll(); });
     toolbarEl.appendChild(btn);
     const lbl=document.createElement('div');
     lbl.className='tool-label'; lbl.textContent=t.name;
@@ -1110,6 +1186,13 @@ function buildToolbar(){
       resetBtn.addEventListener('click', ()=>{ savedRadius=null; pending=null; buildToolbar(); renderAll(); });
       toolbarEl.appendChild(resetBtn);
     }
+  }
+
+  if (tool==='check'){
+    toolbarEl.appendChild(sep());
+    toolbarEl.appendChild(smallToggle('Lines','lines', checkMode, v=>{checkMode=v; checkPending=null; hideCheckBanner(); buildToolbar(); renderAll();}));
+    toolbarEl.appendChild(smallToggle('Circles','circles', checkMode, v=>{checkMode=v; checkPending=null; hideCheckBanner(); buildToolbar(); renderAll();}));
+    toolbarEl.appendChild(smallToggle('Angles','angles', checkMode, v=>{checkMode=v; checkPending=null; hideCheckBanner(); buildToolbar(); renderAll();}));
   }
 }
 function sep(){ const d=document.createElement('div'); d.className='tool-sep'; return d; }
@@ -1165,6 +1248,18 @@ function updateStatus(){
     else if (pending.type==='transportA') msg='Click the second point — this sets the length to transport.';
     else if (pending.type==='transportB') msg='Click the centre where that length should be transported to.';
     else msg='Click to set the direction — a point will be placed exactly that length from the centre.';
+  } else if (tool==='check'){
+    if (checkMode==='lines') msg = checkPending ? 'Click a second line to compare.' : 'Click a line to compare.';
+    else if (checkMode==='circles') msg = checkPending ? 'Click a second circle or arc to compare.' : 'Click a circle or arc to compare.';
+    else {
+      const stage = checkPending ? checkPending.stage : null;
+      if (!stage) msg='Click the vertex of the first angle.';
+      else if (stage==='need_a1') msg='Click a point on the first arm of the angle.';
+      else if (stage==='need_b1') msg='Click a point on the second arm of the angle.';
+      else if (stage==='need_v2') msg='Click the vertex of the second angle.';
+      else if (stage==='need_a2') msg='Click a point on the first arm of the second angle.';
+      else msg='Click a point on the second arm of the second angle.';
+    }
   }
   instr.textContent = msg;
   const mobileInstr = document.getElementById('mobileInstruction');
@@ -1284,6 +1379,72 @@ function applyExtend(lineId, targetPoint){
   // where does the target point fall along the line's own direction?
   const t = ((targetPoint.x-p1.x)*dirx + (targetPoint.y-p1.y)*diry)/len2;
   if (t <= 0.5) l.p1 = targetPoint.id; else l.p2 = targetPoint.id;
+}
+
+/* ---- equivalence checking: lines, circles/arcs, and angles ---- */
+function handleCheckClick(world){
+  if (checkMode==='lines' || checkMode==='circles'){
+    const wantType = checkMode==='lines' ? 'line' : 'arc';
+    const hit = objectHitTest(world, lastPointerType==='touch'?18:12);
+    if (!hit || hit.type!==wantType){ return; }
+
+    if (!checkPending){
+      checkPending = { picks:[hit.id] };
+      hideCheckBanner();
+    } else if (checkPending.picks[0]===hit.id){
+      checkPending = null; // clicking the same object again cancels
+    } else {
+      const idA=checkPending.picks[0], idB=hit.id;
+      if (checkMode==='lines'){
+        const a=lines.find(x=>x.id===idA), b=lines.find(x=>x.id===idB);
+        const la=dist(getPoint(a.p1),getPoint(a.p2)), lb=dist(getPoint(b.p1),getPoint(b.p2));
+        const ok = Math.abs(la-lb) < EPS_LENGTH;
+        showCheckResult(ok, `Line (${la.toFixed(2)})`, `Line (${lb.toFixed(2)})`, Math.abs(la-lb));
+      } else {
+        const a=arcs.find(x=>x.id===idA), b=arcs.find(x=>x.id===idB);
+        const ok = Math.abs(a.r-b.r) < EPS_LENGTH;
+        showCheckResult(ok, `${a.full?'Circle':'Arc'} r=${a.r.toFixed(2)}`, `${b.full?'Circle':'Arc'} r=${b.r.toFixed(2)}`, Math.abs(a.r-b.r));
+      }
+      checkPending = null;
+    }
+    render();
+    return;
+  }
+
+  // angles: vertex, arm, arm — twice
+  const hit = pointHitTest(world, lastPointerType==='touch'?18:12);
+  if (!hit) return;
+  const p = getPoint(hit.id);
+
+  if (!checkPending) { checkPending = { stage:'need_a1', v1:p.id }; hideCheckBanner(); }
+  else if (checkPending.stage==='need_a1') checkPending = { ...checkPending, stage:'need_b1', a1:p.id };
+  else if (checkPending.stage==='need_b1'){
+    const angle1 = angleAt(getPoint(checkPending.v1), getPoint(checkPending.a1), p);
+    checkPending = { ...checkPending, stage:'need_v2', b1:p.id, angle1 };
+    hideCheckBanner();
+  }
+  else if (checkPending.stage==='need_v2') checkPending = { ...checkPending, stage:'need_a2', v2:p.id };
+  else if (checkPending.stage==='need_a2') checkPending = { ...checkPending, stage:'need_b2', a2:p.id };
+  else if (checkPending.stage==='need_b2'){
+    const angle2 = angleAt(getPoint(checkPending.v2), getPoint(checkPending.a2), p);
+    const ok = Math.abs(checkPending.angle1-angle2) < EPS_ANGLE;
+    showCheckResult(ok, `∠ ${checkPending.angle1.toFixed(1)}°`, `∠ ${angle2.toFixed(1)}°`, Math.abs(checkPending.angle1-angle2));
+    checkPending = null;
+  }
+  render();
+}
+
+function showCheckResult(ok, labelA, labelB, delta){
+  checkResult = { ok, labelA, labelB, delta };
+  const el = document.getElementById('checkBanner');
+  el.className = 'check-banner ' + (ok ? 'equal' : 'notequal');
+  el.style.display = 'flex';
+  el.innerHTML = `<span>${labelA} vs ${labelB}</span><span class="check-verdict">${ok ? '≅ Equal' : '≠ Not equal'}</span><span style="color:var(--panel-text-dim)">(Δ ${delta.toFixed(2)})</span>`;
+}
+function hideCheckBanner(){
+  checkResult = null;
+  const el = document.getElementById('checkBanner');
+  if (el){ el.style.display='none'; }
 }
 
 /* ============================== TOP-LEVEL CONTROLS ============================== */
