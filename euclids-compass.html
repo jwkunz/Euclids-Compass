@@ -193,6 +193,7 @@
     border:1px solid transparent; cursor:pointer;
   }
   .layer-row.active{ border-color:var(--brass); background:rgba(176,141,79,0.12); }
+  .layer-row.flash{ background:rgba(176,141,79,0.5); transition:background .55s ease; }
   .layer-row input[type=text]{
     flex:1; background:transparent; border:none; color:var(--panel-text);
     font-size:12.5px; font-family:'Inter',sans-serif; min-width:0;
@@ -1136,6 +1137,24 @@ function handleClick(world){
   renderAll();
 }
 
+function flashLayerRow(layerId){
+  const row = document.querySelector(`.layer-row[data-layer-id="${layerId}"]`);
+  if (!row) return;
+  row.classList.add('flash');
+  setTimeout(()=>row.classList.remove('flash'), 550);
+}
+
+function reassignSelectionLayer(layerId){
+  if (!selection) return;
+  if (selection.type==='point'){
+    const p=getPoint(selection.id); if (p) p.layerId=layerId;
+  } else if (selection.type==='line'){
+    const l=lines.find(x=>x.id===selection.id); if (l) l.layerId=layerId;
+  } else if (selection.type==='arc'){
+    const a=arcs.find(x=>x.id===selection.id); if (a) a.layerId=layerId;
+  }
+}
+
 function deleteSelection(){
   if (!selection) return;
   pushHistory();
@@ -1273,6 +1292,7 @@ function renderLayerPanel(){
   layers.forEach(layer=>{
     const row=document.createElement('div');
     row.className='layer-row'+(layer.id===activeLayerId?' active':'');
+    row.dataset.layerId = layer.id;
 
     const eye=document.createElement('button');
     eye.className='eye'+(layer.visible?'':' hidden');
@@ -1318,7 +1338,19 @@ function renderLayerPanel(){
     });
     row.appendChild(del);
 
-    row.addEventListener('click', ()=>{ activeLayerId=layer.id; renderLayerPanel(); });
+    row.addEventListener('click', ()=>{
+      if (selection){
+        pushHistory();
+        reassignSelectionLayer(layer.id);
+        renderLayerPanel();
+        renderProps();
+        render();
+        flashLayerRow(layer.id);
+      } else {
+        activeLayerId=layer.id;
+        renderLayerPanel();
+      }
+    });
     list.appendChild(row);
   });
 }
@@ -1341,21 +1373,29 @@ function renderProps(){
     if (!p){ selection=null; return renderProps(); }
     body.innerHTML = `<div class="props-line"><span>type</span> point</div>
       <div class="props-line"><span>x</span> ${p.x.toFixed(1)}</div>
-      <div class="props-line"><span>y</span> ${p.y.toFixed(1)}</div>`;
+      <div class="props-line"><span>y</span> ${p.y.toFixed(1)}</div>
+      <div class="props-line"><span>layer</span> ${layerNameOf(p.layerId)}</div>`;
   } else if (selection.type==='line'){
     const l=lines.find(x=>x.id===selection.id);
     if (!l){ selection=null; return renderProps(); }
     const p1=getPoint(l.p1), p2=getPoint(l.p2);
     body.innerHTML = `<div class="props-line"><span>type</span> line</div>
-      <div class="props-line"><span>length</span> ${dist(p1,p2).toFixed(2)}</div>`;
+      <div class="props-line"><span>length</span> ${dist(p1,p2).toFixed(2)}</div>
+      <div class="props-line"><span>layer</span> ${layerNameOf(l.layerId)}</div>`;
   } else if (selection.type==='arc'){
     const a=arcs.find(x=>x.id===selection.id);
     if (!a){ selection=null; return renderProps(); }
     body.innerHTML = `<div class="props-line"><span>type</span> ${a.full?'circle':'arc'}</div>
       <div class="props-line"><span>radius</span> ${a.r.toFixed(2)}</div>
-      ${a.full?'':`<div class="props-line"><span>sweep</span> ${(Math.abs(a.endAngle-a.startAngle)*180/Math.PI).toFixed(1)}°</div>`}`;
+      ${a.full?'':`<div class="props-line"><span>sweep</span> ${(Math.abs(a.endAngle-a.startAngle)*180/Math.PI).toFixed(1)}°</div>`}
+      <div class="props-line"><span>layer</span> ${layerNameOf(a.layerId)}</div>`;
   }
+  body.innerHTML += `<div class="props-empty" style="margin-top:8px;">Click a layer above to move this here.</div>`;
   document.getElementById('extendSelBtn').style.display = (selection.type==='line') ? 'inline-block' : 'none';
+}
+function layerNameOf(id){
+  const l=layers.find(x=>x.id===id);
+  return l ? l.name : '—';
 }
 
 document.getElementById('deleteSelBtn').addEventListener('click', deleteSelection);
