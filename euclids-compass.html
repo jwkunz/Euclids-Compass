@@ -369,6 +369,7 @@
       <h2>Selection</h2>
       <div id="propsBody"><div class="props-empty">Nothing selected.</div></div>
       <div class="panel-row" style="margin-top:8px;">
+        <button class="btn" id="extendSelBtn" style="display:none;">Extend / trim</button>
         <button class="btn danger" id="deleteSelBtn">Delete</button>
       </div>
     </div>
@@ -664,9 +665,10 @@ function render(){
 
   // pending construction preview
   drawPendingPreview();
+  drawExtendPreview();
 
   // hover snap indicator
-  if (hoverSnap && tool!=='select'){
+  if (hoverSnap && (tool!=='select' || pendingExtend)){
     ctx.save();
     ctx.strokeStyle = hoverSnap.existing ? '#8c2f21' : '#b08d4f';
     ctx.lineWidth = 1.4/view.scale;
@@ -685,6 +687,25 @@ function strokeSelected(pathFn){
   ctx.setLineDash([]);
   pathFn();
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawExtendPreview(){
+  if (!pendingExtend || !lastMouseWorld) return;
+  const l = lines.find(x=>x.id===pendingExtend.lineId);
+  if (!l) return;
+  const p1=getPoint(l.p1), p2=getPoint(l.p2);
+  const cursor = hoverSnap ? {x:hoverSnap.x,y:hoverSnap.y} : lastMouseWorld;
+  const dirx=p2.x-p1.x, diry=p2.y-p1.y;
+  const len2=dirx*dirx+diry*diry;
+  if (len2<1e-9) return;
+  const t=((cursor.x-p1.x)*dirx+(cursor.y-p1.y)*diry)/len2;
+  const anchor = (t<=0.5) ? p2 : p1;
+  ctx.save();
+  ctx.strokeStyle='#8c2f21';
+  ctx.setLineDash([6/view.scale,4/view.scale]);
+  ctx.lineWidth=1.6/view.scale;
+  ctx.beginPath(); ctx.moveTo(anchor.x,anchor.y); ctx.lineTo(cursor.x,cursor.y); ctx.stroke();
   ctx.restore();
 }
 
@@ -722,6 +743,18 @@ function drawPendingPreview(){
     const r=dist(a,b);
     ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
     ctx.beginPath(); ctx.arc(cursor.x,cursor.y,r,0,TWO_PI); ctx.stroke();
+  } else if (pending.type==='transportC'){
+    const c=getPoint(pending.center);
+    ctx.beginPath(); ctx.arc(c.x,c.y,pending.r,0,TWO_PI); ctx.stroke();
+    const dx=cursor.x-c.x, dy=cursor.y-c.y;
+    const len=Math.hypot(dx,dy);
+    const ux = len>1e-9 ? dx/len : 1, uy = len>1e-9 ? dy/len : 0;
+    const landing = {x:c.x+ux*pending.r, y:c.y+uy*pending.r};
+    ctx.beginPath(); ctx.moveTo(c.x,c.y); ctx.lineTo(landing.x,landing.y); ctx.stroke();
+    ctx.save();
+    ctx.fillStyle='#8c2f21'; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(landing.x,landing.y,4/view.scale,0,TWO_PI); ctx.fill();
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -824,7 +857,7 @@ canvas.addEventListener('pointerdown', (evt)=>{
     moved:false,
     onPoint: hit ? getPoint(hit.id) : null
   };
-  hoverSnap = tool==='select' ? null : findSnap(world);
+  hoverSnap = (tool==='select' && !pendingExtend) ? null : findSnap(world);
   render();
 });
 
@@ -871,7 +904,7 @@ canvas.addEventListener('pointermove', (evt)=>{
     }
   }
 
-  if (tool==='select'){
+  if (tool==='select' && !pendingExtend){
     hoverSnap=null;
   } else {
     hoverSnap = findSnap(world);
@@ -925,7 +958,7 @@ canvas.addEventListener('wheel', (evt)=>{
 
 window.addEventListener('keydown', (evt)=>{
   if (evt.code==='Space'){ spaceDown=true; canvas.style.cursor='grab'; }
-  if (evt.key==='Escape'){ pending=null; render(); updateStatus(); }
+  if (evt.key==='Escape'){ pending=null; pendingExtend=null; render(); updateStatus(); }
   if ((evt.key==='Delete'||evt.key==='Backspace') && selection){
     if (document.activeElement && document.activeElement.tagName==='INPUT') return;
     deleteSelection();
@@ -938,6 +971,14 @@ window.addEventListener('keyup', (evt)=>{
 
 function handleClick(world){
   if (tool==='select'){
+    if (pendingExtend){
+      pushHistory();
+      const pt = resolvePoint(world);
+      applyExtend(pendingExtend.lineId, pt);
+      pendingExtend=null;
+      renderAll();
+      return;
+    }
     const hit = objectHitTest(world, lastPointerType==='touch'?18:12);
     selection = hit;
     renderAll();
@@ -1001,10 +1042,17 @@ function handleClick(world){
     } else if (pending.type==='transportB'){
       const A=getPoint(pending.a), B=getPoint(pending.b);
       const r=dist(A,B);
-      if (r>1e-6){
-        arcs.push({id:uid('arc'), cx:pt.x, cy:pt.y, r, startAngle:0, endAngle:TWO_PI, full:true, anticlockwise:false, layerId:activeLayerId});
-        savedRadius=r;
-      }
+      if (r>1e-6) pending={type:'transportC', a:pending.a, b:pending.b, r, center:pt.id};
+      else pending=null;
+    } else if (pending.type==='transportC'){
+      const c=getPoint(pending.center);
+      const dx=pt.x-c.x, dy=pt.y-c.y;
+      const len=Math.hypot(dx,dy);
+      const ux = len>1e-9 ? dx/len : 1;
+      const uy = len>1e-9 ? dy/len : 0;
+      arcs.push({id:uid('arc'), cx:c.x, cy:c.y, r:pending.r, startAngle:0, endAngle:TWO_PI, full:true, anticlockwise:false, layerId:activeLayerId});
+      points.push({id:uid('pt'), x:c.x+ux*pending.r, y:c.y+uy*pending.r, layerId:activeLayerId});
+      savedRadius=pending.r;
       pending=null;
     }
   }
@@ -1038,7 +1086,7 @@ function buildToolbar(){
     btn.className='tool-btn'+(tool===t.id?' active':'');
     btn.innerHTML=ICONS[t.id];
     btn.title=t.name;
-    btn.addEventListener('click', ()=>{ tool=t.id; pending=null; selection=null; buildToolbar(); renderAll(); });
+    btn.addEventListener('click', ()=>{ tool=t.id; pending=null; pendingExtend=null; selection=null; buildToolbar(); renderAll(); });
     toolbarEl.appendChild(btn);
     const lbl=document.createElement('div');
     lbl.className='tool-label'; lbl.textContent=t.name;
@@ -1095,7 +1143,11 @@ function updateStatus(){
   }
 
   let msg='';
-  if (tool==='select') msg='Click to select · drag a point to move it · Delete to remove.';
+  if (tool==='select'){
+    msg = pendingExtend
+      ? 'Click where the line should reach — it will snap to points and intersections.'
+      : 'Click to select · drag a point to move it · Delete to remove.';
+  }
   else if (tool==='point') msg='Click to place a point. It will snap to nearby points or intersections.';
   else if (tool==='line'){
     msg = pending ? 'Click the second point to complete the line.' : 'Click the first point of the line.';
@@ -1111,7 +1163,8 @@ function updateStatus(){
   } else if (tool==='transport'){
     if (!pending) msg='Click the first point of the length you want to copy.';
     else if (pending.type==='transportA') msg='Click the second point — this sets the length to transport.';
-    else msg='Click the centre where that length should be drawn as a circle.';
+    else if (pending.type==='transportB') msg='Click the centre where that length should be transported to.';
+    else msg='Click to set the direction — a point will be placed exactly that length from the centre.';
   }
   instr.textContent = msg;
   const mobileInstr = document.getElementById('mobileInstruction');
@@ -1207,9 +1260,31 @@ function renderProps(){
       <div class="props-line"><span>radius</span> ${a.r.toFixed(2)}</div>
       ${a.full?'':`<div class="props-line"><span>sweep</span> ${(Math.abs(a.endAngle-a.startAngle)*180/Math.PI).toFixed(1)}°</div>`}`;
   }
+  document.getElementById('extendSelBtn').style.display = (selection.type==='line') ? 'inline-block' : 'none';
 }
 
 document.getElementById('deleteSelBtn').addEventListener('click', deleteSelection);
+
+/* ---- extend / trim an existing line, straightedge-style ---- */
+let pendingExtend = null; // {lineId}
+document.getElementById('extendSelBtn').addEventListener('click', ()=>{
+  if (!selection || selection.type!=='line') return;
+  pendingExtend = { lineId: selection.id };
+  updateStatus();
+  render();
+});
+
+function applyExtend(lineId, targetPoint){
+  const l = lines.find(x=>x.id===lineId);
+  if (!l) return;
+  const p1=getPoint(l.p1), p2=getPoint(l.p2);
+  const dirx=p2.x-p1.x, diry=p2.y-p1.y;
+  const len2 = dirx*dirx+diry*diry;
+  if (len2<1e-9) return;
+  // where does the target point fall along the line's own direction?
+  const t = ((targetPoint.x-p1.x)*dirx + (targetPoint.y-p1.y)*diry)/len2;
+  if (t <= 0.5) l.p1 = targetPoint.id; else l.p2 = targetPoint.id;
+}
 
 /* ============================== TOP-LEVEL CONTROLS ============================== */
 document.getElementById('undoBtn').addEventListener('click', undo);
