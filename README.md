@@ -1,6 +1,6 @@
 # Euclid's Compass
 
-**Version 1.1.0**
+**Version 1.2.0**
 
 **Euclid's Compass** is a single-file, offline-capable web app for doing straightedge-and-compass
 constructions — the same constructions Euclid works through in the *Elements* — in an interactive
@@ -27,7 +27,10 @@ fonts). Open `euclids-compass.html` in a browser and start constructing.
 Selected lines can be **extended or trimmed** to a new point, like sliding a straightedge further
 along a line. **Layers** hold groups of objects with their own color, line style (solid / dashed /
 dotted), visibility, and an optional **lock** that protects a layer's contents from editing,
-deletion, or "Clear all" (with a checkbox to include locked layers anyway).
+deletion, or "Clear all" (with a checkbox to include locked layers anyway). The app starts with two
+layers already set up: **Base** (solid, red) as the active drawing layer, and **Construction**
+(dotted, black) sitting ready in the queue for when you need to mark auxiliary construction lines
+separately from the main figure.
 
 The app is a full pointer-events implementation: single-finger tap-and-drag on touch devices,
 two-finger pinch to zoom and pan, right-click-drag or Space-drag to pan on desktop, scroll wheel to zoom.

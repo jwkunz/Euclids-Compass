@@ -541,7 +541,9 @@
     </ul>
     <p>A selected line can be <b>extended or trimmed</b> to a new point, like sliding a straightedge
     further along its own direction. Layers can be locked to protect their contents from editing,
-    deletion, or "Clear all."</p>
+    deletion, or "Clear all." The canvas starts with two layers ready to go: <b>Base</b> (solid, red)
+    as the active drawing layer, and <b>Construction</b> (dotted, black) waiting in the queue for
+    auxiliary lines you don't want mixed into the main figure.</p>
 
     <h3>Euclid's tools, and how this app maps to them</h3>
     <p>Euclid's <em>Elements</em> opens with three postulates describing exactly two instruments: an
@@ -594,7 +596,7 @@
    the version (header badge, help modal title, help modal footer, and
    the <meta name="application-version"> tag) is driven from this one
    constant at init time, so they can never drift out of sync. */
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 /* ============================== ICONS ============================== */
 const ICONS = {
@@ -626,9 +628,12 @@ let nextId = 1;
 const uid = p => p + (nextId++);
 
 const PALETTE = ['#2b2016', '#8c2f21', '#3a5c46', '#3d4f7a', '#7a5230', '#6b3f6b'];
-let paletteIdx = 1;
+let paletteIdx = 2;
 
-const layers = [{ id:'layer-1', name:'Construction', color:'#2b2016', dash:'dashed', visible:true, locked:false }];
+const layers = [
+  { id:'layer-1', name:'Base', color:'#8c2f21', dash:'solid', visible:true, locked:false },
+  { id:'layer-2', name:'Construction', color:'#2b2016', dash:'dotted', visible:true, locked:false }
+];
 const points = [];   // {id,x,y,layerId}
 const lines  = [];   // {id,p1,p2,layerId}  segment between two point ids
 const arcs   = [];   // {id,cx,cy,r,startAngle,endAngle,full,anticlockwise,layerId}
