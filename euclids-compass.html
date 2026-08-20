@@ -909,12 +909,18 @@ function drawExtendPreview(){
   const len2=dirx*dirx+diry*diry;
   if (len2<1e-9) return;
   const t=((cursor.x-p1.x)*dirx+(cursor.y-p1.y)*diry)/len2;
+  // project the cursor back onto the line's own direction — this is where
+  // the endpoint will actually land, which may not be exactly under the cursor
+  const projX=p1.x+t*dirx, projY=p1.y+t*diry;
   const anchor = (t<=0.5) ? p2 : p1;
   ctx.save();
   ctx.strokeStyle='#8c2f21';
   ctx.setLineDash([6/view.scale,4/view.scale]);
   ctx.lineWidth=1.6/view.scale;
-  ctx.beginPath(); ctx.moveTo(anchor.x,anchor.y); ctx.lineTo(cursor.x,cursor.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(anchor.x,anchor.y); ctx.lineTo(projX,projY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#8c2f21';
+  ctx.beginPath(); ctx.arc(projX,projY,3.5/view.scale,0,TWO_PI); ctx.fill();
   ctx.restore();
 }
 
@@ -1221,9 +1227,11 @@ window.addEventListener('keyup', (evt)=>{
 function handleClick(world){
   if (tool==='select'){
     if (pendingExtend){
+      const l = lines.find(x=>x.id===pendingExtend.lineId);
+      if (!l || isLockedLayer(l.layerId)){ flashLockedNotice(); pendingExtend=null; renderAll(); return; }
       pushHistory();
-      const pt = resolvePoint(world);
-      applyExtend(pendingExtend.lineId, pt);
+      const pt = resolveExtendPoint(pendingExtend.lineId, world);
+      if (pt) applyExtend(pendingExtend.lineId, pt);
       pendingExtend=null;
       renderAll();
       return;
@@ -1445,7 +1453,7 @@ function updateStatus(){
   let msg='';
   if (tool==='select'){
     msg = pendingExtend
-      ? 'Click where the line should reach — it will snap to points and intersections.'
+      ? "Click where the line should reach — it stays on the line's own direction, so off-axis clicks land on the nearest point along it."
       : 'Click to select · drag a point to move it · Delete to remove.';
   }
   else if (tool==='point') msg='Click to place a point. It will snap to nearby points or intersections.';
@@ -1628,6 +1636,32 @@ document.getElementById('extendSelBtn').addEventListener('click', ()=>{
   render();
 });
 
+function resolveExtendPoint(lineId, world){
+  const l = lines.find(x=>x.id===lineId);
+  if (!l) return null;
+  const p1=getPoint(l.p1), p2=getPoint(l.p2);
+  const dirx=p2.x-p1.x, diry=p2.y-p1.y;
+  const len2 = dirx*dirx+diry*diry;
+  if (len2<1e-9) return null;
+
+  // Snap to nearby points/intersections as usual, but only *reuse* an
+  // existing point if it's actually (near enough to) already on this
+  // line's own direction — otherwise the line would kink off-axis.
+  const snap = findSnap(world);
+  const candidate = snap ? {x:snap.x, y:snap.y, existing:snap.existing} : {x:world.x, y:world.y, existing:null};
+
+  const t = ((candidate.x-p1.x)*dirx + (candidate.y-p1.y)*diry)/len2;
+  const projX = p1.x + t*dirx, projY = p1.y + t*diry;
+  const onLineTol = 8/view.scale;
+
+  if (candidate.existing && Math.hypot(candidate.x-projX, candidate.y-projY) <= onLineTol){
+    return candidate.existing;
+  }
+  const p = { id: uid('pt'), x: projX, y: projY, layerId: l.layerId };
+  points.push(p);
+  return p;
+}
+
 function applyExtend(lineId, targetPoint){
   const l = lines.find(x=>x.id===lineId);
   if (!l) return;
@@ -1636,7 +1670,8 @@ function applyExtend(lineId, targetPoint){
   const dirx=p2.x-p1.x, diry=p2.y-p1.y;
   const len2 = dirx*dirx+diry*diry;
   if (len2<1e-9) return;
-  // where does the target point fall along the line's own direction?
+  // targetPoint is already guaranteed collinear by resolveExtendPoint —
+  // this just decides which end of the segment it becomes.
   const t = ((targetPoint.x-p1.x)*dirx + (targetPoint.y-p1.y)*diry)/len2;
   if (t <= 0.5) l.p1 = targetPoint.id; else l.p2 = targetPoint.id;
 }
