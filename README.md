@@ -1,5 +1,7 @@
 # Euclid's Compass
 
+**Version 1.1.0**
+
 **Euclid's Compass** is a single-file, offline-capable web app for doing straightedge-and-compass
 constructions — the same constructions Euclid works through in the *Elements* — in an interactive
 canvas, with layers, construction-equivalence checks, and touch support.
@@ -15,6 +17,7 @@ fonts). Open `euclids-compass.html` in a browser and start constructing.
 | Tool | What it's for |
 |---|---|
 | **Select** | Click a point, line, or circle/arc to select it. Drag a point to move it. Delete/Backspace removes it. |
+| **Eraser** | Click an object to delete it, or drag across several to erase a whole stroke's worth at once — no need to open the Layers panel. |
 | **Point** | Place a point. Snaps to existing points and to computed intersections. |
 | **Line** | Click two points to draw a straight segment between them — the straightedge. |
 | **Compass** | Click a centre, then a radius point, to draw a circle. Toggle **Arc** to swing only part of the circle. Toggle **Collapsing** / **Rigid** to control whether the compass "remembers" its span after it's lifted. |
@@ -92,6 +95,12 @@ with the original diagrams and historical notes, see:
 ## Files
 
 - `euclids-compass.html` — the entire application. Open it directly in a browser.
+
+The app's version number is defined once, as the `APP_VERSION` constant near the top of the
+`<script>` block in `euclids-compass.html`, and every on-page display of it (the header badge, the
+Help modal title, the Help modal footer, and the `<meta name="application-version">` tag) is set
+from that single constant at load time — so they can't drift out of sync with each other. This
+README is updated by hand to match on each release.
 
 ---
 

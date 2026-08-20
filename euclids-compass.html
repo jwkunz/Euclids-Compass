@@ -501,6 +501,7 @@
         <li><b>Compass</b> — click a centre, then a radius point. Toggle <b>Arc</b> to swing only part of the circle.</li>
         <li><b>Transport</b> — click two points to capture a length, then click a centre to stamp that length elsewhere.</li>
         <li><b>Select</b> — drag points to move them; press Delete to remove.</li>
+        <li><b>Eraser</b> — click or drag across items to delete them quickly.</li>
         <li>Scroll to zoom, right-drag (or hold Space) to pan.</li>
       </ul>
     </div>
@@ -526,6 +527,8 @@
     <ul>
       <li><b>Select</b> — click a point, line, or circle/arc to select it. Drag a point to move it.
         Delete/Backspace removes it. Click a layer in the panel to move the selection there.</li>
+      <li><b>Eraser</b> — click an object to delete it, or drag across several to erase a whole
+        stroke's worth at once, without opening the Layers panel.</li>
       <li><b>Point</b> — click to place a point; snaps to existing points and computed intersections.</li>
       <li><b>Line</b> — click two points to draw a straight segment — the straightedge.</li>
       <li><b>Compass</b> — click a centre, then a radius point, to draw a circle. Toggle
@@ -591,7 +594,7 @@
    the version (header badge, help modal title, help modal footer, and
    the <meta name="application-version"> tag) is driven from this one
    constant at init time, so they can never drift out of sync. */
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 
 /* ============================== ICONS ============================== */
 const ICONS = {
@@ -601,6 +604,7 @@ const ICONS = {
   compass: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l-6 16M12 4l6 16"/><circle cx="12" cy="4" r="1.8" fill="currentColor" stroke="none"/><circle cx="6" cy="20" r="1.6" fill="currentColor" stroke="none"/><path d="M15 14a5 5 0 0 1-1.6 1.4" stroke-dasharray="1 3"/></svg>`,
   transport: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="1.8" fill="currentColor" stroke="none"/><circle cx="19" cy="19" r="1.8" fill="currentColor" stroke="none"/><path d="M5 19h14"/><path d="M12 19V5"/><path d="M9 8l3-3 3 3"/></svg>`,
   check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.6 2.6L16 9.5"/></svg>`,
+  eraser: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="12" height="8" rx="1.5" transform="rotate(-35 13 11)" fill="currentColor" fill-opacity="0.15"/><path d="M4 19h16"/></svg>`,
   eyeOpen: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>`,
   eyeShut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a15.6 15.6 0 0 1-3.4 4.3M6.6 6.6C4 8.3 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.9-.8"/><path d="M9.5 9.8a3 3 0 0 0 4.2 4.2"/></svg>`,
   lockClosed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`,
@@ -609,6 +613,7 @@ const ICONS = {
 
 const TOOLS = [
   {id:'select', name:'Select'},
+  {id:'eraser', name:'Eraser'},
   {id:'point', name:'Point'},
   {id:'line', name:'Line'},
   {id:'compass', name:'Compass'},
@@ -875,6 +880,7 @@ function render(){
   drawPendingPreview();
   drawExtendPreview();
   drawCheckHighlights();
+  drawEraserHighlight();
 
   // hover snap indicator
   if (hoverSnap && (tool!=='select' || pendingExtend)){
@@ -921,6 +927,27 @@ function drawExtendPreview(){
   ctx.setLineDash([]);
   ctx.fillStyle='#8c2f21';
   ctx.beginPath(); ctx.arc(projX,projY,3.5/view.scale,0,TWO_PI); ctx.fill();
+  ctx.restore();
+}
+
+function drawEraserHighlight(){
+  if (tool!=='eraser' || !eraserHover) return;
+  const locked = !canDeleteObject(eraserHover.type, eraserHover.id);
+  ctx.save();
+  ctx.strokeStyle = locked ? '#5a4c3a' : '#8c2f21';
+  ctx.lineWidth = 4/view.scale;
+  ctx.globalAlpha = 0.8;
+  ctx.setLineDash(locked ? [3/view.scale, 3/view.scale] : []);
+  if (eraserHover.type==='point'){
+    const p=getPoint(eraserHover.id);
+    if (p){ ctx.beginPath(); ctx.arc(p.x,p.y,8/view.scale,0,TWO_PI); ctx.stroke(); }
+  } else if (eraserHover.type==='line'){
+    const l=lines.find(x=>x.id===eraserHover.id);
+    if (l){ const p1=getPoint(l.p1), p2=getPoint(l.p2); ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke(); }
+  } else if (eraserHover.type==='arc'){
+    const a=arcs.find(x=>x.id===eraserHover.id);
+    if (a){ ctx.beginPath(); drawArcPath(a); ctx.stroke(); }
+  }
   ctx.restore();
 }
 
@@ -1084,7 +1111,7 @@ canvas.addEventListener('pointerdown', (evt)=>{
   if (evt.pointerType==='mouse' && evt.button!==0) return;
 
   if (activePointers.size===2){
-    singleGesture=null; dragPoint=null; hoverSnap=null;
+    singleGesture=null; dragPoint=null; hoverSnap=null; erasing=false;
     const pts=[...activePointers.values()];
     const dx=pts[0].x-pts[1].x, dy=pts[0].y-pts[1].y;
     pinchState = {
@@ -1100,6 +1127,16 @@ canvas.addEventListener('pointerdown', (evt)=>{
 
   const world = mouseWorld(evt);
   lastMouseWorld = world;
+
+  if (tool==='eraser'){
+    pushHistory();
+    erasing = true;
+    eraserBlockedFlash = false;
+    eraseAt(world);
+    render();
+    return;
+  }
+
   const hit = tool==='select' ? pointHitTest(world, evt.pointerType==='touch'?18:12) : null;
   const hitPoint = hit ? getPoint(hit.id) : null;
   const hitLocked = hitPoint ? isLockedLayer(hitPoint.layerId) : false;
@@ -1137,6 +1174,13 @@ canvas.addEventListener('pointermove', (evt)=>{
   const world = mouseWorld(evt);
   lastMouseWorld = world;
 
+  if (erasing){
+    eraseAt(world);
+    eraserHover = objectHitTest(world, lastPointerType==='touch'?18:12);
+    render();
+    return;
+  }
+
   if (isPanning){
     view.ox = panStart.ox + (evt.clientX-panStart.x);
     view.oy = panStart.oy + (evt.clientY-panStart.y);
@@ -1157,6 +1201,13 @@ canvas.addEventListener('pointermove', (evt)=>{
     }
   }
 
+  if (tool==='eraser'){
+    eraserHover = objectHitTest(world, lastPointerType==='touch'?18:12);
+    hoverSnap = null;
+    render();
+    return;
+  }
+
   if (tool==='select' && !pendingExtend){
     hoverSnap=null;
   } else {
@@ -1167,6 +1218,8 @@ canvas.addEventListener('pointermove', (evt)=>{
 
 canvas.addEventListener('pointerup', (evt)=>{
   activePointers.delete(evt.pointerId);
+
+  if (erasing){ erasing=false; renderAll(); return; }
 
   if (pinchState){
     if (activePointers.size<2) pinchState=null;
@@ -1189,12 +1242,13 @@ canvas.addEventListener('pointerup', (evt)=>{
 
 canvas.addEventListener('pointercancel', (evt)=>{
   activePointers.delete(evt.pointerId);
+  erasing=false;
   if (activePointers.size<2) pinchState=null;
   if (singleGesture && singleGesture.pointerId===evt.pointerId){ singleGesture=null; dragPoint=null; }
 });
 
 canvas.addEventListener('pointerleave', (evt)=>{
-  if (evt.pointerType==='mouse'){ hoverSnap=null; render(); }
+  if (evt.pointerType==='mouse'){ hoverSnap=null; eraserHover=null; render(); }
 });
 
 canvas.addEventListener('contextmenu', e=>e.preventDefault());
@@ -1351,20 +1405,51 @@ function reassignSelectionLayer(layerId){
 
 function deleteSelection(){
   if (!selection) return;
-  if (isLockedLayer(selectedObjectLayerId())){ flashLockedNotice(); return; }
+  if (!canDeleteObject(selection.type, selection.id)){ flashLockedNotice(); return; }
   pushHistory();
-  if (selection.type==='point'){
-    const id=selection.id;
+  performDelete(selection.type, selection.id);
+  selection=null;
+  renderAll();
+}
+
+/* ---- shared, lock-aware deletion used by Select+Delete and the Eraser tool ---- */
+function canDeleteObject(type, id){
+  if (type==='point'){
+    const p=getPoint(id);
+    if (!p) return false;
+    if (isLockedLayer(p.layerId)) return false;
+    // don't let deleting a point silently take a locked line down with it
+    for (const l of lines) if ((l.p1===id||l.p2===id) && isLockedLayer(l.layerId)) return false;
+    return true;
+  }
+  if (type==='line'){ const l=lines.find(x=>x.id===id); return l ? !isLockedLayer(l.layerId) : false; }
+  if (type==='arc'){ const a=arcs.find(x=>x.id===id); return a ? !isLockedLayer(a.layerId) : false; }
+  return false;
+}
+function performDelete(type, id){
+  if (type==='point'){
     for (let i=lines.length-1;i>=0;i--) if (lines[i].p1===id||lines[i].p2===id) lines.splice(i,1);
     const idx=points.findIndex(p=>p.id===id);
     if (idx>=0) points.splice(idx,1);
-  } else if (selection.type==='line'){
-    const idx=lines.findIndex(l=>l.id===selection.id); if (idx>=0) lines.splice(idx,1);
-  } else if (selection.type==='arc'){
-    const idx=arcs.findIndex(a=>a.id===selection.id); if (idx>=0) arcs.splice(idx,1);
+  } else if (type==='line'){
+    const idx=lines.findIndex(l=>l.id===id); if (idx>=0) lines.splice(idx,1);
+  } else if (type==='arc'){
+    const idx=arcs.findIndex(a=>a.id===id); if (idx>=0) arcs.splice(idx,1);
   }
-  selection=null;
-  renderAll();
+}
+
+let eraserHover = null;      // {type,id} currently under the cursor, for highlight
+let erasing = false;         // true while an erase drag is in progress
+let eraserBlockedFlash = false;
+function eraseAt(world){
+  const hit = objectHitTest(world, lastPointerType==='touch'?18:12);
+  if (!hit) return;
+  if (!canDeleteObject(hit.type, hit.id)){
+    if (!eraserBlockedFlash){ flashLockedNotice(); eraserBlockedFlash=true; }
+    return;
+  }
+  performDelete(hit.type, hit.id);
+  if (selection && selection.type===hit.type && selection.id===hit.id) selection=null;
 }
 
 /* ============================== TOOLBAR ============================== */
@@ -1376,7 +1461,7 @@ function buildToolbar(){
     btn.className='tool-btn'+(tool===t.id?' active':'');
     btn.innerHTML=ICONS[t.id];
     btn.title=t.name;
-    btn.addEventListener('click', ()=>{ tool=t.id; pending=null; pendingExtend=null; selection=null; checkPending=null; hideCheckBanner(); buildToolbar(); renderAll(); });
+    btn.addEventListener('click', ()=>{ tool=t.id; pending=null; pendingExtend=null; selection=null; checkPending=null; erasing=false; eraserHover=null; hideCheckBanner(); buildToolbar(); renderAll(); });
     toolbarEl.appendChild(btn);
     const lbl=document.createElement('div');
     lbl.className='tool-label'; lbl.textContent=t.name;
@@ -1456,6 +1541,7 @@ function updateStatus(){
       ? "Click where the line should reach — it stays on the line's own direction, so off-axis clicks land on the nearest point along it."
       : 'Click to select · drag a point to move it · Delete to remove.';
   }
+  else if (tool==='eraser') msg='Click an object to delete it, or drag across several to erase them all. Locked layers are skipped.';
   else if (tool==='point') msg='Click to place a point. It will snap to nearby points or intersections.';
   else if (tool==='line'){
     msg = pending ? 'Click the second point to complete the line.' : 'Click the first point of the line.';
