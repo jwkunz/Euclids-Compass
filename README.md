@@ -1,5 +1,7 @@
 # Euclid's Compass
 
+![Euclid's Compass logo](web/euclids-compass-logo.png)
+
 **Version 1.2.0**
 
 **Euclid's Compass** is a single-file, offline-capable web app for doing straightedge-and-compass
@@ -8,7 +10,14 @@ canvas, with layers, construction-equivalence checks, and touch support.
 
 It's one HTML file. There's no build step, no server, and no dependencies beyond three Google
 Fonts loaded at runtime (the app still works without them — it just falls back to your system
-fonts). Open `euclids-compass.html` in a browser and start constructing.
+fonts). It also ships as an Android app that wraps the same file in a WebView.
+
+## Get it
+
+| Where | What |
+|-------|------|
+| **[jwkunz.github.io/Euclids-Compass](https://jwkunz.github.io/Euclids-Compass/)** | The web app, always the latest `main` (deployed by GitHub Pages) |
+| **[Releases](https://github.com/jwkunz/Euclids-Compass/releases)** | `euclids-compass-vX.Y.Z.html`, a single file you can save and open locally, and `euclids-compass-vX.Y.Z-debug.apk`, the Android app |
 
 ---
 
@@ -95,15 +104,64 @@ with the original diagrams and historical notes, see:
 
 ---
 
-## Files
+## Repository layout
 
-- `euclids-compass.html` — the entire application. Open it directly in a browser.
+```
+VERSION                  the one place the project version lives
+web/                     the web app
+  euclids-compass.html     the entire application (edit this)
+  euclids-compass-logo.png logo
+Android/                 Gradle project: a WebView app that bundles web/euclids-compass.html
+scripts/version.mjs      keeps VERSION and the web app's APP_VERSION in step
+.github/workflows/       ci.yml (APK build, releases) and pages.yml (site deploy)
+```
 
-The app's version number is defined once, as the `APP_VERSION` constant near the top of the
-`<script>` block in `euclids-compass.html`, and every on-page display of it (the header badge, the
-Help modal title, the Help modal footer, and the `<meta name="application-version">` tag) is set
-from that single constant at load time — so they can't drift out of sync with each other. This
-README is updated by hand to match on each release.
+The web app is edited in exactly one place, `web/euclids-compass.html`. Both the GitHub Pages site and
+the Android app are built from it, so a push to `main` updates the site, and the next APK build
+picks up the same code. Android-specific behavior (PNG export to the device, mobile safe-area and
+toolbar layout fixes) lives in `Android/app/src/main/java/com/example/euclidscompass/MainActivity.kt`
+and is injected at load time; the HTML itself is never patched for Android.
+
+## Building locally
+
+**Web.** There is nothing to build: open `web/euclids-compass.html` in a browser.
+
+**Android.** Needs JDK 21 and the Android SDK.
+
+```bash
+cd Android
+./gradlew :app:assembleDebug        # copies the web page into the app, then builds the APK
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+The APK is a debug build; a Play Store upload needs a signed release build, which is not set up here.
+
+## Continuous integration
+
+- **`ci.yml`** runs on pushes to `main`, tags and pull requests: checks the version files agree and builds the debug APK.
+- **On a `v*` tag** it also publishes a GitHub release containing the HTML file and the APK.
+- **`pages.yml`** deploys `web/euclids-compass.html` to GitHub Pages on every push to `main`.
+
+## Versioning and releasing
+
+The app's version is defined in `VERSION` and mirrored in the `APP_VERSION` constant near the top of
+the `<script>` block in `web/euclids-compass.html`; every on-page display of it (header badge, Help
+modal, `<meta name="application-version">`) is set from that constant at load time. The Android
+`versionName` and `versionCode` (`major*10000 + minor*100 + patch`) are derived from `VERSION`.
+
+```bash
+node scripts/version.mjs                # print the version
+node scripts/version.mjs set 1.3.0      # update VERSION and APP_VERSION
+node scripts/version.mjs check          # fail if they disagree
+```
+
+Update the version line at the top of this README, then commit and tag:
+
+```bash
+git tag v1.3.0 && git push origin v1.3.0
+```
+
+CI refuses to release if the tag doesn't match `VERSION`.
 
 ---
 
